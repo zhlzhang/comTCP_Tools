@@ -262,6 +262,67 @@ saveLogBtn.onclick = function()
     end
 end
 
+-- 清空接收
+local clearRecvBtn = winform.tab.pages[0].add({cls="button"; left=640; top=10; width=60; height=25; text="清空接收"});
+clearRecvBtn.onclick = function()
+    recvRich.text = "";
+end
+
+-- 串口高级设置
+local dataBitsBox = winform.tab.pages[0].add({cls="combobox"; left=10; top=10; width=80; height=25});
+dataBitsBox.add({"8", "7", "6", "5"});
+dataBitsBox.text = "8";
+
+local parityBox = winform.tab.pages[0].add({cls="combobox"; left=100; top=10; width=80; height=25});
+parityBox.add({"无", "奇", "偶"});
+parityBox.text = "无";
+
+local stopBitsBox = winform.tab.pages[0].add({cls="combobox"; left=190; top=10; width=80; height=25});
+stopBitsBox.add({"1", "2"});
+stopBitsBox.text = "1";
+
+-- UDP发送
+local udpClient = null;
+udpBtn.onclick = function()
+    local ip = ipBox.text;
+    local port = tonumber(portBox2.text);
+    udpClient = dotNet.createUdpClient();
+    udpClient:connect(ip, port);
+    winform.msg("UDP已绑定: " .. ip .. ":" .. port);
+end
+
+-- 以太网发送按钮事件
+ethSendBtn.onclick = function()
+    local text = ethSendEdit.text;
+    if (text and #text > 0) then
+        local data = dotNet.fromHex(text);
+        if (tcpClient) then
+            tcpClient:send(data);
+        elseif (udpClient) then
+            udpClient:send(data);
+        end
+        ethSendEdit.text = "";
+    end
+end
+
+-- Lua脚本集成串口
+local luaSendBtn = winform.tab.pages[2].add({cls="button"; left=190; top=470; width=80; height=30; text="发送到串口"});
+luaSendBtn.onclick = function()
+    local code = luaEdit.text;
+    if (code and #code > 0 and serialPort) then
+        local result = lua.eval(code);
+        if (result) then
+            serialPort:write(tostring(result));
+        end
+    end
+end
+
+-- Lua脚本清空接收
+local luaClearRecvBtn = winform.tab.pages[2].add({cls="button"; left=280; top=470; width=80; height=30; text="清空串口接收"});
+luaClearRecvBtn.onclick = function()
+    if (recvRich) then recvRich.text = ""; end
+end
+
 -- 刷新串口列表
 fillPorts();
 
