@@ -42,3 +42,228 @@ end);
 
 winform.show();
 win.loopMessage();
+
+-- 串口调试控件
+local portBox = winform.tab.pages[0].add({cls="combobox"; left=10; top=10; width=150; height=25});
+local baudBox = winform.tab.pages[0].add({cls="combobox"; left=170; top=10; width=100; height=25});
+local openBtn = winform.tab.pages[0].add({cls="button"; left=280; top=10; width=60; height=25; text="打开"});
+local sendEdit = winform.tab.pages[0].add({cls="edit"; left=10; top=50; width=900; height=60});
+local sendBtn = winform.tab.pages[0].add({cls="button"; left=920; top=50; width=80; height=25; text="发送"});
+local recvRich = winform.tab.pages[0].add({cls="richedit"; left=10; top=90; width=1000; height=500});
+
+-- 以太网控件
+local ipBox = winform.tab.pages[1].add({cls="edit"; left=10; top=10; width=150; height=25; text="127.0.0.1"});
+local portBox2 = winform.tab.pages[1].add({cls="edit"; left=170; top=10; width=80; height=25; text="8080"});
+local tcpBtn = winform.tab.pages[1].add({cls="button"; left=260; top=10; width=60; height=25; text="TCP连接"});
+local udpBtn = winform.tab.pages[1].add({cls="button"; left=330; top=10; width=60; height=25; text="UDP发送"});
+local ethSendEdit = winform.tab.pages[1].add({cls="edit"; left=10; top=50; width=900; height=60});
+local ethSendBtn = winform.tab.pages[1].add({cls="button"; left=920; top=50; width=80; height=25; text="发送"});
+local ethRecvRich = winform.tab.pages[1].add({cls="richedit"; left=10; top=90; width=1000; height=500});
+
+-- Lua脚本控件
+local luaEdit = winform.tab.pages[2].add({cls="richedit"; left=10; top=10; width=1000; height=450});
+local runBtn = winform.tab.pages[2].add({cls="button"; left=10; top=470; width=80; height=30; text="运行"});
+local clearBtn = winform.tab.pages[2].add({cls="button"; left=100; top=470; width=80; height=30; text="清空"});
+local luaOutput = winform.tab.pages[2].add({cls="richedit"; left=10; top=510; width=1000; height=150});
+
+-- 填充串口列表
+local function fillPorts()
+    local ports = dotNet.getSerialPorts();
+    portBox.clear();
+    for i = 1, #ports do
+        portBox.add(ports[i]);
+    end
+    if (#ports > 0) then portBox.text = ports[1]; end
+end
+
+-- 填充波特率
+local baudRates = {9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600};
+baudBox.clear();
+for i = 1, #baudRates do
+    baudBox.add(tostring(baudRates[i]));
+end
+baudBox.text = "115200";
+
+-- 串口对象
+local serialPort = null;
+local isHexReceive = true;
+local isHexSend = false;
+
+-- 串口打开按钮事件
+openBtn.onclick = function()
+    if (serialPort == null) then
+        local portName = portBox.text;
+        local baudRate = tonumber(baudBox.text);
+        serialPort = dotNet.createSerialPort(portName, baudRate);
+        if (serialPort:open()) then
+            openBtn.text = "关闭";
+            winform.msg("串口已打开: " .. portName .. " " .. baudRate);
+            -- 启动接收线程
+            thread.invoke(function()
+                while (serialPort) do
+                    local data = serialPort:read();
+                    if (data and #data > 0) then
+                        local display = isHexReceive and dotNet.toHex(data) or data;
+                        recvRich.appendText("[" .. os.date("%H:%M:%S") .. "] " .. display .. "\n");
+                    end
+                end
+            end);
+        else
+            winform.msg("打开串口失败");
+            serialPort = null;
+        end
+    else
+        serialPort:close();
+        serialPort = null;
+        openBtn.text = "打开";
+        winform.msg("串口已关闭");
+    end
+end
+
+-- 串口发送按钮事件
+sendBtn.onclick = function()
+    local text = sendEdit.text;
+    if (text and #text > 0 and serialPort) then
+        local data = isHexSend and dotNet.fromHex(text) or text;
+        serialPort:write(data);
+        sendEdit.text = "";
+    end
+end
+
+-- 以太网TCP连接
+local tcpClient = null;
+local tcpConnected = false;
+
+tcpBtn.onclick = function()
+    if (not tcpConnected) then
+        local ip = ipBox.text;
+        local port = tonumber(portBox2.text);
+        tcpClient = dotNet.createTcpClient(ip, port);
+        if (tcpClient:connect()) then
+            tcpConnected = true;
+            tcpBtn.text = "断开";
+            -- 启动接收线程
+            thread.invoke(function()
+                while (tcpConnected) do
+                    local data = tcpClient:read();
+                    if (data and #data > 0) then
+                        local display = dotNet.toHex(data);
+                        ethRecvRich.appendText("[" .. os.date("%H:%M:%S") .. "] " .. display .. "\n");
+                    end
+                end
+            end);
+        else
+            winform.msg("TCP连接失败");
+            tcpClient = null;
+        end
+    else
+        tcpConnected = false;
+        if (tcpClient) then tcpClient:close(); end
+        tcpClient = null;
+        tcpBtn.text = "TCP连接";
+    end
+end
+
+-- 以太网发送按钮事件
+ethSendBtn.onclick = function()
+    local text = ethSendEdit.text;
+    if (text and #text > 0 and tcpClient) then
+        local data = dotNet.fromHex(text);
+        tcpClient:send(data);
+        ethSendEdit.text = "";
+    end
+end
+
+-- Lua脚本运行
+runBtn.onclick = function()
+    local code = luaEdit.text;
+    if (code and #code > 0) then
+        local result, err = pcall(function()
+            return lua.eval(code);
+        end);
+        if (result) then
+            luaOutput.text = tostring(result);
+        else
+            luaOutput.text = "错误: " .. tostring(err);
+        end
+    end
+end
+
+-- 清空Lua输出
+clearBtn.onclick = function()
+    luaOutput.text = "";
+end
+
+-- 串口接收复选框
+local hexRecvChk = winform.tab.pages[0].add({cls="checkbox"; left=800; top=10; text="十六进制接收"; checked=true});
+hexRecvChk.onclick = function()
+    isHexReceive = hexRecvChk.checked;
+end
+
+-- 串口发送复选框
+local hexSendChk = winform.tab.pages[0].add({cls="checkbox"; left=930; top=10; text="十六进制发送"; checked=false});
+hexSendChk.onclick = function()
+    isHexSend = hexSendChk.checked;
+end
+
+-- 自动发送
+local autoSendChk = winform.tab.pages[0].add({cls="checkbox"; left=10; top=10; text="自动发送";});
+local intervalSpin = winform.tab.pages[0].add({cls="spin"; left=100; top=10; width=60; height=25; min=10; max=10000; value=1000});
+local autoSendTimer = null;
+
+autoSendChk.onclick = function()
+    if (autoSendChk.checked) then
+        autoSendTimer = thread.timer(intervalSpin.value, function()
+            sendBtn.onclick();
+        end);
+        autoSendTimer.start();
+    else
+        if (autoSendTimer) then autoSendTimer.stop(); end
+    end
+end
+
+-- CRC计算
+local function calcCRC16(data)
+    local crc = 0xFFFF;
+    for i = 1, #data do
+        crc = crc ~ bit.lshift(data[i], 8);
+        for j = 1, 8 do
+            if (bit.band(crc, 1) ~= 0) then
+                crc = bit.rshift(crc, 1) ~ 0xA001;
+            else
+                crc = bit.rshift(crc, 1);
+            end
+        end
+    end
+    return crc;
+end
+
+-- Modbus CRC按钮
+local crcBtn = winform.tab.pages[0].add({cls="button"; left=500; top=10; width=60; height=25; text="CRC16"});
+crcBtn.onclick = function()
+    local text = sendEdit.text;
+    if (text and #text > 0) then
+        local data = isHexSend and dotNet.fromHex(text) or text;
+        local crc = calcCRC16(data);
+        local crcHex = string.format("%04X", crc);
+        sendEdit.text = text .. " " .. crcHex;
+    end
+end
+
+-- 保存日志
+local saveLogBtn = winform.tab.pages[0].add({cls="button"; left=570; top=10; width=60; height=25; text="保存日志"});
+saveLogBtn.onclick = function()
+    local filename = "serial_log_" .. os.date("%Y%m%d_%H%M%S") .. ".txt";
+    local file = io.open(filename, "w");
+    if (file) then
+        file:write(recvRich.text);
+        file:close();
+        winform.msg("日志已保存: " .. filename);
+    end
+end
+
+-- 刷新串口列表
+fillPorts();
+
+winform.show();
+win.loopMessage();
