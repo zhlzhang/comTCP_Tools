@@ -1,0 +1,44 @@
+-- main.aardio - 串口/以太网调试工具
+import win.ui;
+import win.ui.ctrl.edit;
+import win.ui.ctrl.button;
+import win.ui.ctrl.combobox;
+import win.ui.ctrl.tab;
+import win.ui.ctrl.richedit;
+import win.ui.ctrl.checkbox;
+import win.ui.ctrl.spin;
+import win.ui.ctrl.static;
+import win.ui.ctrl.listbox;
+import win.ui.ctrl.tree;
+
+import dotNet;
+import System;
+import System.IO.Ports;
+import System.Net;
+import System.Net.Sockets;
+import System.Threading;
+
+/*DSG{*/
+var winform = win.form(text="串口/以太网调试工具"; right=1020; bottom=720; resizable=true);
+winform.add(
+    tab={cls="tab"; left=0; top=0; right=1020; bottom=720; anchors={left=1;top=1;right=1;bottom=1}; z=1};
+)
+/*DSG*/
+
+-- 选项卡1：串口
+winform.tab.addPage("串口", function()
+    return win.form(text="串口调试"; right=1020; bottom=720);
+end);
+
+-- 选项卡2：以太网
+winform.tab.addPage("以太网", function()
+    return win.form(text="以太网调试"; right=1020; bottom=720);
+end);
+
+-- 选项卡3：Lua脚本
+winform.tab.addPage("Lua脚本", function()
+    return win.form(text="Lua脚本"; right=1020; bottom=720);
+end);
+
+winform.show();
+win.loopMessage();
